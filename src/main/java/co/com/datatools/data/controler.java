@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
 import java.util.Calendar;
+import java.util.Date;
 import java.util.List;
 import java.util.Locale;
 
@@ -14,6 +15,7 @@ import javax.ws.rs.core.Response.Status;
 
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.lang3.StringUtils;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -196,5 +198,22 @@ public class controler {
 		PruebaPDF p = new PruebaPDF();
 		p.generarPDF(arguments);
 		return Response.status(Status.OK).build();
+	}
+
+	@GET
+	@RequestMapping(path = "/pruebasuma/{entero}", produces = { "application/JSON" })
+	public String suma(@PathVariable("entero") Integer entero) {
+		Integer total = 0;
+		Date d1 = new Date();
+		for (int i = 1; i <= entero; i++) {
+			total += i;
+		}
+		Date d2 = new Date();
+		System.out.println((d2.getTime() - d1.getTime()));
+		d1 = new Date();
+		total = (entero + 1) * (entero / 2);
+		d2 = new Date();
+		System.out.println((d2.getTime() - d1.getTime()));
+		return "-->" + String.valueOf(total);
 	}
 }
