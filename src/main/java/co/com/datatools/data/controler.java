@@ -1,8 +1,10 @@
 package co.com.datatools.data;
 
 import java.math.BigDecimal;
+import java.security.Key;
 import java.text.DecimalFormat;
 import java.text.DecimalFormatSymbols;
+import java.text.SimpleDateFormat;
 import java.util.Calendar;
 import java.util.Date;
 import java.util.List;
@@ -14,6 +16,7 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 
 import org.apache.commons.codec.binary.Base64;
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,6 +32,13 @@ import com.jayway.jsonpath.Criteria;
 import com.jayway.jsonpath.DocumentContext;
 import com.jayway.jsonpath.Filter;
 import com.jayway.jsonpath.JsonPath;
+
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Jws;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import io.jsonwebtoken.security.Keys;
 
 @RestController
 public class controler {
@@ -145,43 +155,6 @@ public class controler {
 		return Response.status(Status.OK).entity(now).build();
 	}
 
-	@POST
-	@RequestMapping(path = "/pruebajwt/", consumes = { "application/JSON" }, produces = { "application/JSON" })
-	public Response pruebaJWT(@RequestBody String datosJson, @RequestHeader("Authorization") String authString) {
-		if (!isUserAuthenticated(authString)) {
-			return Response.status(Status.FORBIDDEN).entity("{\"error\":\"User not authenticated\"}").build();
-		}
-		return Response.status(Status.OK).build();
-	}
-
-	private boolean isUserAuthenticated(String authString) {
-		String decodedAuth = "";
-		String[] authParts = authString.split("\\s+");
-		String authInfo = authParts[1];
-		String[] split_string = authInfo.split("\\.");
-		String base64EncodedHeader = split_string[0];
-		String base64EncodedBody = split_string[1];
-		String base64EncodedSignature = split_string[2];
-
-		System.out.println("~~~~~~~~~ JWT Header ~~~~~~~");
-		Base64 base64Url = new Base64(true);
-		String header = new String(base64Url.decode(base64EncodedHeader));
-		System.out.println("JWT Header : " + header);
-
-		System.out.println("~~~~~~~~~ JWT Body ~~~~~~~");
-		String body = new String(base64Url.decode(base64EncodedBody));
-		System.out.println("JWT Body : " + body);
-
-		Gson gson = new GsonBuilder().setDateFormat("DD/MM/YYYY").create();
-		JsonObject objBody = gson.fromJson(body, JsonObject.class);
-		if (objBody != null) {
-			if ("1234567890".equals(objBody.get("sub").getAsString())) {
-				return true;
-			}
-		}
-		return false;
-	}
-
 	@GET
 	@RequestMapping(path = "/pruebapdf", produces = { "application/JSON" })
 	public Response pruebapdf() {
@@ -216,4 +189,104 @@ public class controler {
 		System.out.println((d2.getTime() - d1.getTime()));
 		return "-->" + String.valueOf(total);
 	}
+
+	@GET
+	@RequestMapping(path = "/wsnotifica", produces = { "application/JSON" })
+	public String notifica() {
+		Gson gson = new GsonBuilder().setPrettyPrinting().setDateFormat("DD/MM/YYYY").create();
+		JsonObject obj = new JsonObject();
+		obj.addProperty("idProyecto", 1);
+		obj.addProperty("tipoDocumento", "no se");
+		obj.addProperty("referencia", 123456789);
+		obj.addProperty("numeroIdentificacion", "0907565329");
+		obj.addProperty("tipoIdentificacion", "CED");
+		/* (impugnada,cancelada,anulada) */
+		obj.addProperty("Motivo", "impugnada");
+		SimpleDateFormat format = new SimpleDateFormat("dd/MM/yyyy");
+		obj.addProperty("fechaNotificacion", format.format(new Date()));
+		JsonArray arr = new JsonArray();
+		arr.add(obj);
+		return gson.toJson(arr);
+	}
+
+	@GET
+	@RequestMapping(path = "/generartoken", produces = { "application/JSON" })
+	public String pruebaToken() {
+		Gson gson = new GsonBuilder().setPrettyPrinting().setDateFormat("DD/MM/YYYY").create();
+		return generarToken();
+	}
+
+	private String generarToken() {
+		Gson gson = new GsonBuilder().setPrettyPrinting().setDateFormat("DD/MM/YYYY").create();
+		Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+		JsonObject request = new JsonObject();
+		request.addProperty("user", "odaimar");
+		request.addProperty("pass", "verysecretpwd");
+		SimpleDateFormat format = new SimpleDateFormat("dd/MM/yyyy");
+		request.addProperty("date", format.format(new Date()));
+		return Jwts.builder().setPayload(StringEscapeUtils.unescapeJava(gson.toJson(request))).signWith(key).compact();
+	}
+
+	private boolean isUserAuthenticated2(String authString) {
+		String[] authParts = authString.split("\\s+");
+		Jws<Claims> jws;
+		Key key = Keys.secretKeyFor(SignatureAlgorithm.HS256);
+		try {
+
+			System.out.println(Jwts.parser() // (1)
+					.setSigningKey(key) // (2)
+					.parse(authParts[1]));
+
+			jws = Jwts.parser() // (1)
+					.setSigningKey(key) // (2)
+					.parseClaimsJws(authParts[1]); // (3)
+
+			System.out.println(jws);
+			// we can safely trust the JWT
+			JsonObject request = new JsonObject();
+		} catch (JwtException ex) { // (4)
+			ex.printStackTrace();
+		}
+		return false;
+	}
+
+	@POST
+	@RequestMapping(path = "/pruebajwt/", consumes = { "application/JSON" }, produces = { "application/JSON" })
+	public Response pruebaJWT(@RequestBody String datosJson, @RequestHeader("Authorization") String authString) {
+		if (!isUserAuthenticated(authString)) {
+			return Response.status(Status.FORBIDDEN).entity("{\"error\":\"User not authenticated\"}").build();
+		}
+		Gson gson = new GsonBuilder().setPrettyPrinting().setDateFormat("DD/MM/YYYY").create();
+
+		return Response.status(Status.OK).entity(datosJson).build();
+	}
+
+	private boolean isUserAuthenticated(String authString) {
+		String decodedAuth = "";
+		String[] authParts = authString.split("\\s+");
+		String authInfo = authParts[1];
+		String[] split_string = authInfo.split("\\.");
+		String base64EncodedHeader = split_string[0];
+		String base64EncodedBody = split_string[1];
+		String base64EncodedSignature = split_string[2];
+
+		System.out.println("~~~~~~~~~ JWT Header ~~~~~~~");
+		Base64 base64Url = new Base64(true);
+		String header = new String(base64Url.decode(base64EncodedHeader));
+		System.out.println("JWT Header : " + header);
+
+		System.out.println("~~~~~~~~~ JWT Body ~~~~~~~");
+		String body = new String(base64Url.decode(base64EncodedBody));
+		System.out.println("JWT Body : " + body);
+
+		Gson gson = new GsonBuilder().setDateFormat("DD/MM/YYYY").create();
+		JsonObject objBody = gson.fromJson(body, JsonObject.class);
+		if (objBody != null) {
+			if ("odaimar".equals(objBody.get("user").getAsString())) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 }
